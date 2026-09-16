@@ -1,0 +1,25 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" onLoad="OnAddinLoad">
+    <ribbon startFromScratch="false">
+        <tabs>
+            <tab id="dshTab" label="AI 助手">
+                <group id="dshGroup" label="DSH">
+                    <!--
+                      一个控件**不能同时**写 label 和 getLabel。
+
+                      写了两个，WPS 会直接拒绝整份 ribbon.xml —— 而且是完全静默的：
+                      没有报错、没有日志、标签页不出现、**onLoad 也不会触发**。
+                      表现出来就像整个加载项死掉了，实际连入口都没进去。
+                      实测踩过，查了很久。
+
+                      同理：visible/getVisible、enabled/getEnabled、image/getImage
+                      也都不要成对写。
+                    -->
+                    <button id="btnToggleChat" getLabel="OnGetLabel" onAction="OnAction"
+                            getImage="GetImage" getVisible="OnGetVisible" size="large"/>
+                    <button id="btnOpenSettings" label="模型设置" onAction="OnAction"
+                            getImage="GetImage" getVisible="OnGetVisible" size="large"/>
+                </group>
+            </tab>
+        </tabs>
+    </ribbon>
+</customUI>

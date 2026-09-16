@@ -1,0 +1,25 @@
+# 统一换行，避免 Windows/Linux 之间来回改
+* text=auto
+
+# 批处理和 PowerShell 脚本在 Windows 上按 CRLF 走（.ps1 还带 UTF-8 BOM，Git 不会动它）
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 其余一律 LF
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.svg text eol=lf
+
+# 二进制，别去动它
+*.png binary
+*.jpg binary
+*.zip binary
+*.7z binary
+*.exe binary

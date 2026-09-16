@@ -1,0 +1,15 @@
+{
+  "name": "dsh-wps",
+  "version": "0.1.0",
+  "private": true,
+  "description": "把 DSH 风格的 AI 助手嵌入 WPS：自带 API Key、多厂商、修订留痕、整轮撤销",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "dev": "node server/index.mjs --verbose"
+  }
+}

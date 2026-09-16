@@ -1,0 +1,15 @@
+# 运行时数据 —— 绝对不能进仓库
+dev/testhome*/
+dev/testhome-isolated/
+dev/*.log
+*.log
+
+# 凭据 —— 这个项目是要分享的，泄漏一次就等于把 Key 送人
+credentials.json
+*.key
+.env
+.env.*
+
+# 依赖与构建产物
+node_modules/
+dist/

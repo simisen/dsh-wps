@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH 模型设置</title>
+<script>
+(function () {
+  function report(o) {
+    try {
+      o.where = 'settings.html'
+      fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) })
+    } catch (e) {}
+  }
+  window.onerror = function (msg, src, line, col, err) {
+    report({ message: String(msg), src: String(src || ''), line: line, col: col, stack: err && err.stack })
+  }
+  window.addEventListener('unhandledrejection', function (e) {
+    report({ message: 'unhandledrejection: ' + String(e && e.reason) })
+  })
+})()
+</script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --fg: #1f2329;
+    --fg-dim: #6b7280;
+    --line: #dfe3e8;
+    --accent: #2b6cf6;
+    --ok: #16a34a;
+    --err: #d93025;
+    --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1e1f22; --bg-soft:#26282c; --fg:#e6e6e6; --fg-dim:#9aa0a6; --line:#35373b; --accent:#4c8dff; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.55 "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    color: var(--fg); background: var(--bg); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .head { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); background: var(--bg-soft); }
+  .head h1 { margin: 0; font-size: 14px; }
+  .head p { margin: 4px 0 0; font-size: 11px; color: var(--fg-dim); }
+  .body { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px; }
+  .foot { flex: 0 0 auto; border-top: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 8px; align-items: center; }
+
+  .row { margin-bottom: 11px; }
+  label.lb { display: block; font-size: 12px; color: var(--fg-dim); margin-bottom: 4px; }
+  input[type=text], input[type=password], select {
+    width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; font-size: 13px; background: var(--bg); color: var(--fg);
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .inline { display: flex; gap: 6px; align-items: stretch; }
+  .inline input { flex: 1 1 auto; }
+  .inline button { flex: 0 0 auto; }
+
+  button {
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+    border-radius: 6px; padding: 6px 13px; cursor: pointer; font-size: 12px; font-family: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { opacity: .9; color: #fff; }
+  .spacer { flex: 1 1 auto; }
+
+  .note { font-size: 11px; color: var(--fg-dim); margin-top: 4px; line-height: 1.5; }
+  .note a { color: var(--accent); text-decoration: none; }
+  .note a:hover { text-decoration: underline; }
+
+  .result { margin-top: 10px; border-radius: 6px; padding: 9px 11px; font-size: 12px; display: none; }
+  .result.show { display: block; }
+  .result.ok { background: #e9f7ef; color: #14532d; }
+  .result.err { background: #fdecea; color: #8a1f16; }
+  .result.wait { background: var(--bg-soft); color: var(--fg-dim); }
+  @media (prefers-color-scheme: dark) {
+    .result.ok { background: #14301f; color: #86efac; }
+    .result.err { background: #3a1d1a; color: #ffb4ab; }
+  }
+  .result b { display: block; margin-bottom: 2px; }
+  .result .raw { margin-top: 5px; font-family: Consolas, monospace; font-size: 11px; opacity: .75; word-break: break-all; }
+
+  fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px 11px; margin: 0 0 11px; }
+  legend { font-size: 11px; color: var(--fg-dim); padding: 0 5px; }
+  .radios { display: flex; gap: 14px; }
+  .radios label { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; }
+  .status { font-size: 12px; color: var(--fg-dim); }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .status.warn { color: var(--warn); }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>模型设置</h1>
+  <p>助手直接连你选的厂商，API Key 只存在这台电脑上，不经过任何第三方服务器。</p>
+</div>
+
+<div class="body">
+  <div class="row">
+    <label class="lb" for="provider">厂商</label>
+    <select id="provider"></select>
+    <div class="note" id="providerNote"></div>
+  </div>
+
+  <div class="row">
+    <label class="lb" for="baseURL">接口地址（baseURL）</label>
+    <input type="text" id="baseURL" spellcheck="false" placeholder="https://api.example.com/v1">
+    <div class="note">一般填到 <code>/v1</code> 为止。选厂商会自动填好，通常不用改。</div>
+  </div>
+
+  <div class="row">
+    <label class="lb" for="model">模型名</label>
+    <div class="inline">
+      <input type="text" id="model" list="modelList" spellcheck="false" placeholder="例如 deepseek-chat">
+      <button id="btnFetchModels" type="button" title="从厂商拉取真实可用的模型列表">拉取列表</button>
+    </div>
+    <datalist id="modelList"></datalist>
+    <div class="note" id="modelNote">点「拉取列表」向厂商要一份真实可用的模型，然后从下拉里挑。</div>
+  </div>
+
+  <div class="row">
+    <label class="lb" for="apiKey">API Key</label>
+    <div class="inline">
+      <input type="password" id="apiKey" spellcheck="false" autocomplete="off" placeholder="粘贴你的 Key">
+      <button id="btnToggleKey" type="button" title="显示/隐藏">显示</button>
+      <button id="btnClearKey" type="button" title="清除已保存的 Key">清除</button>
+    </div>
+    <div class="note" id="keyNote"></div>
+  </div>
+
+  <fieldset>
+    <legend>写入方式</legend>
+    <div class="radios">
+      <label><input type="radio" name="writeMode" value="track"> 修订留痕（推荐）</label>
+      <label><input type="radio" name="writeMode" value="direct"> 直接修改</label>
+    </div>
+    <div class="note">
+      「修订留痕」下助手的改动会以修订形式出现，你可以逐条接受或拒绝；
+      并且它的一整轮操作会打包成<strong>一次撤销</strong>，按一下 Ctrl+Z 就能全部退回。
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>高级</legend>
+    <div class="row">
+      <label class="lb" for="maxTokens">最大输出长度（token）</label>
+      <input type="text" id="maxTokens" spellcheck="false" placeholder="8192">
+      <div class="note">
+        一次回复的上限。写长文（续写、扩写、起草材料）时如果发现内容被截断，
+        把它调大。注意别超过模型本身支持的上限，否则厂商会直接报错。
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="result" id="result"></div>
+</div>
+
+<div class="foot">
+  <span class="status" id="status">就绪</span>
+  <span class="spacer"></span>
+  <button id="btnTest" type="button">测试连接</button>
+  <button id="btnSave" class="primary" type="button">保存</button>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+(function () {
+  var providers = [], current = null, savedHasKey = false
+  var $ = function (id) { return document.getElementById(id) }
+
+  function setStatus(text, cls) {
+    var el = $('status')
+    el.textContent = text
+    el.className = 'status' + (cls ? ' ' + cls : '')
+  }
+
+  function showResult(kind, title, hint, raw) {
+    var el = $('result')
+    el.className = 'result show ' + kind
+    el.innerHTML = ''
+    var b = document.createElement('b'); b.textContent = title; el.appendChild(b)
+    if (hint) { var d = document.createElement('div'); d.textContent = hint; el.appendChild(d) }
+    if (raw) { var r = document.createElement('div'); r.className = 'raw'; r.textContent = String(raw).slice(0, 300); el.appendChild(r) }
+  }
+
+  function selectedProvider() {
+    var id = $('provider').value
+    return providers.filter(function (p) { return p.id === id })[0] || null
+  }
+
+  function fillModels(p) {
+    var dl = $('modelList')
+    dl.innerHTML = ''
+    ;(p && p.models || []).forEach(function (m) {
+      var o = document.createElement('option'); o.value = m; dl.appendChild(o)
+    })
+    $('modelNote').textContent = (p && p.models && p.models.length)
+      ? '候选：' + p.models.join('、') + '；也可以直接输入别的模型名。'
+      : '直接输入厂商文档里的模型名。'
+  }
+
+  function onProviderChange(keepValues) {
+    var p = selectedProvider()
+    if (!p) return
+    if (!keepValues) {
+      $('baseURL').value = p.baseURL || ''
+      $('model').value = (p.models && p.models[0]) || ''
+    }
+    fillModels(p)
+
+    var note = $('providerNote')
+    note.innerHTML = ''
+    if (p.note) note.appendChild(document.createTextNode(p.note))
+    if (p.keyURL) {
+      if (p.note) note.appendChild(document.createTextNode(' · '))
+      var a = document.createElement('a')
+      a.href = '#'; a.textContent = '去申请 Key'
+      a.onclick = function (e) {
+        e.preventDefault()
+        try { window.open(p.keyURL, '_blank') } catch (err) {}
+      }
+      note.appendChild(a)
+    }
+    var needsKey = p.needsKey !== false
+    $('apiKey').disabled = !needsKey
+    refreshKeyNote()
+  }
+
+  function refreshKeyNote() {
+    var p = selectedProvider()
+    var needsKey = !p || p.needsKey !== false
+    var note = $('keyNote')
+    var input = $('apiKey')
+
+    if (!needsKey) {
+      note.textContent = '本地模型不需要 Key，只要服务在跑就行。'
+      input.placeholder = '本地模型不需要 Key'
+      return
+    }
+
+    if (savedHasKey) {
+      // Key 保存后**不会再回传给前端**（安全考虑），所以这个框永远是空的。
+      // 必须让用户一眼看出"已经有了"，否则会以为没保存、每次重填一遍 ——
+      // 实际发生过，用户反馈"每次都要重新输入 API"。
+      input.placeholder = '••••••••（已保存，留空即不修改）'
+      note.textContent = '这台电脑上已经存了这个厂商的 Key，出于安全不会显示出来。'
+        + '留空 = 不修改；要换就直接粘贴新的。'
+    } else {
+      input.placeholder = '粘贴你的 Key'
+      note.textContent = 'Key 只保存在本机，不会上传到任何第三方。'
+    }
+  }
+
+  function payload() {
+    var p = {
+      providerId: $('provider').value,
+      baseURL: $('baseURL').value.trim(),
+      model: $('model').value.trim(),
+      writeMode: (document.querySelector('input[name=writeMode]:checked') || {}).value || 'track'
+    }
+    var mt = parseInt($('maxTokens').value, 10)
+    p.maxTokens = (isFinite(mt) && mt > 0) ? mt : 8192
+    // 关键：留空 = 不修改。绝不能把空串发上去 —— 那会被当成"清除 Key"，
+    // 用户只是改个模型名就把 Key 弄丢了。
+    var k = $('apiKey').value
+    if (k && k.trim()) p.apiKey = k.trim()
+    return p
+  }
+
+  function loadProviders(cb) {
+    DSH.providers(function (r) {
+      providers = (r && r.providers) || []
+      var sel = $('provider')
+      sel.innerHTML = ''
+      providers.forEach(function (p) {
+        var o = document.createElement('option')
+        o.value = p.id; o.textContent = p.name
+        sel.appendChild(o)
+      })
+      cb && cb()
+    })
+  }
+
+  function loadConfig() {
+    DSH.getConfig(function (cfg) {
+      if (!cfg || cfg.ok === false) { setStatus('读不到配置', 'err'); return }
+      savedHasKey = !!cfg.hasKey
+      $('provider').value = cfg.providerId || 'deepseek'
+      onProviderChange(true)
+      $('baseURL').value = cfg.baseURL || $('baseURL').value
+      $('model').value = cfg.model || $('model').value
+      $('maxTokens').value = cfg.maxTokens || 8192
+      var mode = cfg.writeMode === 'direct' ? 'direct' : 'track'
+      var radio = document.querySelector('input[name=writeMode][value=' + mode + ']')
+      if (radio) radio.checked = true
+      if (cfg.keySource && cfg.keySource.indexOf('env:') === 0) {
+        setStatus('Key 来自环境变量 ' + cfg.keySource.slice(4), 'warn')
+        savedHasKey = true
+        refreshKeyNote()
+      } else {
+        setStatus(savedHasKey ? '已配置' : '还没配置', savedHasKey ? 'ok' : 'warn')
+      }
+    })
+  }
+
+  function doTest() {
+    var p = payload()
+    if (!p.baseURL) { showResult('err', '还没填接口地址', '先选一个厂商，或手工填 baseURL。'); return }
+    if (!p.model) { showResult('err', '还没填模型名', '从候选里选一个，或照厂商文档填。'); return }
+    var prov = selectedProvider()
+    if ((!prov || prov.needsKey !== false) && !p.apiKey && !savedHasKey) {
+      showResult('err', '还没填 API Key', '把厂商给的 Key 粘贴进来再测。'); return
+    }
+
+    $('btnTest').disabled = true
+    setStatus('正在测试…')
+    showResult('wait', '正在连接 ' + (prov ? prov.name : ''), '最多等 25 秒。')
+
+    DSH.test(p, function (r) {
+      $('btnTest').disabled = false
+      if (r && r.ok) {
+        var extra = r.model && r.model !== p.model ? '（厂商回报的模型名：' + r.model + '）' : ''
+        showResult('ok', '连接成功 · ' + r.latencyMs + 'ms', (r.hint || '') + extra)
+        setStatus('连接正常', 'ok')
+      } else {
+        showResult('err', (r && r.short) || '连接失败', (r && r.hint) || '', (r && r.raw) || '')
+        setStatus('连接失败', 'err')
+      }
+    })
+  }
+
+  /* 向厂商要一份真实可用的模型列表。
+     硬编码的候选会过时 —— 用户想"自己选喜欢的模型"，就得能拿到真实清单。 */
+  function fetchModels() {
+    var p = payload()
+    if (!p.baseURL) { showResult('err', '还没填接口地址', '先选一个厂商，或手工填 baseURL。'); return }
+    var prov = selectedProvider()
+    if ((!prov || prov.needsKey !== false) && !p.apiKey && !savedHasKey) {
+      showResult('err', '还没填 API Key', '拉取模型列表需要 Key。'); return
+    }
+    $('btnFetchModels').disabled = true
+    setStatus('正在拉取模型列表…')
+    showResult('wait', '正在向 ' + (prov ? prov.name : '厂商') + ' 要模型列表', '最多等 15 秒。')
+
+    DSH.models(p, function (r) {
+      $('btnFetchModels').disabled = false
+      if (r && r.ok && r.models && r.models.length) {
+        var dl = $('modelList')
+        dl.innerHTML = ''
+        r.models.forEach(function (m) {
+          var o = document.createElement('option')
+          o.value = m
+          dl.appendChild(o)
+        })
+        $('modelNote').textContent = '已拉到 ' + r.models.length + ' 个模型，点模型输入框就能选。'
+        showResult('ok', '拉到 ' + r.models.length + ' 个模型',
+          r.models.slice(0, 10).join('、') + (r.models.length > 10 ? ' 等' : ''))
+        setStatus('模型列表已更新', 'ok')
+      } else {
+        showResult('err', (r && r.short) || '拉取失败',
+          ((r && r.hint) || '') + '　不影响使用：直接手填模型名即可。')
+        setStatus('拉取失败', 'err')
+      }
+    })
+  }
+
+  function doSave() {
+    var p = payload()
+    if (!p.model) { showResult('err', '还没填模型名', '不填模型的话助手不知道用哪个。'); return }
+    $('btnSave').disabled = true
+    setStatus('正在保存…')
+    DSH.saveConfig(p, function (r) {
+      $('btnSave').disabled = false
+      if (r && r.ok) {
+        savedHasKey = !!r.config.hasKey
+        $('apiKey').value = ''
+        refreshKeyNote()
+        showResult('ok', '已保存', '设置立刻生效，不用重启。')
+        setStatus('已保存', 'ok')
+        try { DSH_BUS.post({ type: 'config-saved' }) } catch (e) {}
+      } else {
+        showResult('err', (r && r.short) || '保存失败', (r && r.hint) || '')
+        setStatus('保存失败', 'err')
+      }
+    })
+  }
+
+  function init() {
+    loadProviders(function () {
+      loadConfig()
+    })
+    $('provider').onchange = function () { onProviderChange(false) }
+    $('btnToggleKey').onclick = function () {
+      var el = $('apiKey')
+      var showing = el.type === 'text'
+      el.type = showing ? 'password' : 'text'
+      $('btnToggleKey').textContent = showing ? '显示' : '隐藏'
+    }
+    $('btnClearKey').onclick = function () {
+      $('apiKey').value = ''
+      DSH.saveConfig({ providerId: $('provider').value, clearKey: true }, function () {
+        savedHasKey = false
+        refreshKeyNote()
+        setStatus('已清除 Key', 'warn')
+        showResult('ok', '已清除保存的 Key', '')
+        try { DSH_BUS.post({ type: 'config-saved' }) } catch (e) {}
+      })
+    }
+    $('btnTest').onclick = doTest
+    $('btnFetchModels').onclick = fetchModels
+    $('btnSave').onclick = doSave
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
+  else init()
+})()
+</script>
+</body>
+</html>

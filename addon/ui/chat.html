@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 助手</title>
+<script>
+/* 前端错误上报：WPS 里没有 DevTools，出错必须能回传到本地服务，否则用户只看到"点了没反应" */
+(function () {
+  function report(o) {
+    try {
+      o.where = 'chat.html'
+      fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) })
+    } catch (e) {}
+  }
+  window.onerror = function (msg, src, line, col, err) {
+    report({ message: String(msg), src: String(src || ''), line: line, col: col, stack: err && err.stack })
+  }
+  window.addEventListener('unhandledrejection', function (e) {
+    report({ message: 'unhandledrejection: ' + String(e && e.reason) })
+  })
+})()
+</script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f5f6f8;
+    --fg: #1f2329;
+    --fg-dim: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2b6cf6;
+    --accent-soft: #eaf1ff;
+    --danger: #d93025;
+    --ok: #16a34a;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1f22;
+      --bg-soft: #26282c;
+      --fg: #e6e6e6;
+      --fg-dim: #9aa0a6;
+      --line: #35373b;
+      --accent: #4c8dff;
+      --accent-soft: #1d2a44;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.6 "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    color: var(--fg); background: var(--bg);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  header {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-bottom: 1px solid var(--line); background: var(--bg-soft);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; flex: 0 0 auto; }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--danger); }
+  .brand { font-weight: 600; font-size: 13px; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brand small { font-weight: 400; color: var(--fg-dim); margin-left: 6px; font-size: 11px; }
+  header button {
+    flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg);
+    color: var(--fg); border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px;
+  }
+  header button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .banner {
+    flex: 0 0 auto; padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--line);
+    background: var(--accent-soft);
+  }
+  .banner.err { background: #fdecea; color: #8a1f16; }
+  @media (prefers-color-scheme: dark) { .banner.err { background: #3a1d1a; color: #ffb4ab; } }
+  .banner b { display: block; margin-bottom: 3px; }
+  .banner button { margin-top: 7px; }
+  .hidden { display: none !important; }
+
+  main { flex: 1 1 auto; overflow-y: auto; padding: 12px 10px 4px; }
+  .msg { margin-bottom: 12px; display: flex; flex-direction: column; }
+  .msg .who { font-size: 11px; color: var(--fg-dim); margin-bottom: 3px; }
+  .msg .body {
+    white-space: pre-wrap; word-break: break-word;
+    padding: 8px 10px; border-radius: var(--radius); font-size: 13px;
+  }
+  .msg.user { align-items: flex-end; }
+  .msg.user .body { background: var(--accent); color: #fff; }
+  .msg.assistant .body { background: var(--bg-soft); border: 1px solid var(--line); }
+  .msg.system .body { background: transparent; border: 1px dashed var(--line); color: var(--fg-dim); font-size: 12px; }
+  .msg .tools { margin-top: 4px; display: flex; gap: 8px; opacity: 0; transition: opacity .15s; }
+  .msg:hover .tools { opacity: 1; }
+  .msg .tools button {
+    border: 0; background: transparent; color: var(--fg-dim); cursor: pointer;
+    font-size: 11px; padding: 0;
+  }
+  .msg .tools button:hover { color: var(--accent); text-decoration: underline; }
+  .cursor::after { content: "▌"; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .empty { color: var(--fg-dim); font-size: 12px; text-align: center; padding: 24px 10px; line-height: 1.9; }
+  .empty kbd {
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 5px; font-size: 11px;
+  }
+
+  footer { flex: 0 0 auto; border-top: 1px solid var(--line); padding: 8px 10px 10px; background: var(--bg); }
+  .ctxrow { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--fg-dim); }
+  .ctxrow label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .ctxrow .sel { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  textarea {
+    width: 100%; resize: none; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 7px 9px; font: inherit; font-size: 13px; background: var(--bg); color: var(--fg);
+    min-height: 58px; max-height: 180px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .sendrow { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  .sendrow .hint { flex: 1 1 auto; font-size: 11px; color: var(--fg-dim); }
+  .primary {
+    background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+    padding: 5px 16px; cursor: pointer; font-size: 12px;
+  }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .primary.stop { background: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="dot"></span>
+  <span class="brand" id="brand">AI 助手 <small id="modelInfo"></small></span>
+  <button id="btnClear" title="清空当前对话">清空</button>
+  <button id="btnSettings" title="打开模型设置">⚙ 设置</button>
+</header>
+
+<div class="banner hidden" id="banner"></div>
+
+<main id="messages">
+  <div class="empty" id="empty">
+    选中一段文字，然后问我。<br>
+    助手会<b>直接改在文档里</b> —— 改动以修订形式出现，按 <kbd>Ctrl+Z</kbd> 可整轮撤销。<br>
+    比如「帮我润色」「改成正式一点」「把全文的"用户"改成"客户"」<br>
+    <span style="font-size:11px">配置模型请点右上角 <kbd>⚙ 设置</kbd></span>
+  </div>
+</main>
+
+<footer>
+  <div class="ctxrow">
+    <label><input type="checkbox" id="useSelection" checked> 引用当前选区</label>
+    <span class="sel" id="selInfo"></span>
+  </div>
+  <textarea id="input" placeholder="问点什么…  （Ctrl+Enter 发送）"></textarea>
+  <div class="sendrow">
+    <span class="hint" id="hint"></span>
+    <button class="primary" id="btnSend">发送</button>
+  </div>
+</footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/doc.js"></script>
+<script>
+(function () {
+  var state = {
+    messages: [],
+    streaming: false,
+    ctl: null,
+    config: null,
+    serviceOk: false
+  }
+
+  var $ = function (id) { return document.getElementById(id) }
+  var elMessages = $('messages'), elInput = $('input'), elSend = $('btnSend')
+  var elBanner = $('banner'), elDot = $('dot'), elModel = $('modelInfo')
+  var elHint = $('hint'), elSel = $('selInfo'), elUseSel = $('useSelection'), elEmpty = $('empty')
+
+  /* 系统提示词由**服务端**负责拼（含工具使用规则）。
+     前端只送对话历史和文档上下文，不掺和提示词 —— 免得两边打架。 */
+
+  /* ---------------- 文档访问 ---------------- */
+
+  function getSelection() {
+    try {
+      var app = window.Application
+      if (!app) return ''
+      var sel = app.Selection
+      if (!sel || !sel.Range) return ''
+      var t = sel.Range.Text || ''
+      // WPS 的 Range.Text 用 \r 分段、\a 表示段落标记
+      return t.replace(/[\r\a\v\f]/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    } catch (e) { return '' }
+  }
+
+  function getDocName() {
+    try {
+      var app = window.Application
+      var d = app && app.ActiveDocument
+      return d ? String(d.Name) : ''
+    } catch (e) { return '' }
+  }
+
+  function refreshSelectionInfo() {
+    var t = getSelection()
+    if (!t) { elSel.textContent = '（未选中文字）'; return }
+    elSel.textContent = '已选中 ' + t.length + ' 字：' + t.slice(0, 18).replace(/\n/g, ' ') + (t.length > 18 ? '…' : '')
+  }
+
+  /* ---------------- 界面 ---------------- */
+
+  function setStatus(ok, text) {
+    elDot.className = 'dot ' + (ok ? 'ok' : 'bad')
+    elHint.textContent = text || ''
+  }
+
+  function showBanner(kind, title, lines, actionLabel, action) {
+    elBanner.className = 'banner' + (kind === 'err' ? ' err' : '')
+    elBanner.innerHTML = ''
+    var b = document.createElement('b'); b.textContent = title; elBanner.appendChild(b)
+    ;(lines || []).forEach(function (l) {
+      var d = document.createElement('div'); d.textContent = l; elBanner.appendChild(d)
+    })
+    if (actionLabel && action) {
+      var btn = document.createElement('button')
+      btn.textContent = actionLabel
+      btn.onclick = action
+      elBanner.appendChild(btn)
+    }
+    elBanner.classList.remove('hidden')
+  }
+
+  function hideBanner() { elBanner.classList.add('hidden') }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    })
+  }
+
+  function renderOne(msg, idx) {
+    var wrap = document.createElement('div')
+    wrap.className = 'msg ' + msg.role
+    wrap.dataset.idx = idx
+
+    var who = document.createElement('div')
+    who.className = 'who'
+    who.textContent = msg.role === 'user' ? '我' : (msg.role === 'assistant' ? '助手' : '系统')
+    wrap.appendChild(who)
+
+    var body = document.createElement('div')
+    body.className = 'body'
+    body.innerHTML = escapeHtml(msg.content).replace(/\n/g, '<br>')
+    wrap.appendChild(body)
+
+    if (msg.role === 'assistant' && msg.content) {
+      var tools = document.createElement('div')
+      tools.className = 'tools'
+      var cp = document.createElement('button')
+      cp.textContent = '复制'
+      cp.onclick = function () {
+        try {
+          if (navigator.clipboard) navigator.clipboard.writeText(msg.content)
+          else { elInput.value = msg.content; elInput.select() }
+          cp.textContent = '已复制'
+          setTimeout(function () { cp.textContent = '复制' }, 1500)
+        } catch (e) { cp.textContent = '复制失败' }
+      }
+      tools.appendChild(cp)
+      wrap.appendChild(tools)
+    }
+    return wrap
+  }
+
+  function renderAll() {
+    Array.prototype.slice.call(elMessages.querySelectorAll('.msg')).forEach(function (n) { n.remove() })
+    if (!state.messages.length) { elEmpty.classList.remove('hidden'); return }
+    elEmpty.classList.add('hidden')
+    state.messages.forEach(function (m, i) { elMessages.appendChild(renderOne(m, i)) })
+    elMessages.scrollTop = elMessages.scrollHeight
+  }
+
+  function appendStreamingNode() {
+    var wrap = document.createElement('div')
+    wrap.className = 'msg assistant'
+    var who = document.createElement('div'); who.className = 'who'; who.textContent = '助手'
+    var body = document.createElement('div'); body.className = 'body cursor'
+    wrap.appendChild(who); wrap.appendChild(body)
+    elEmpty.classList.add('hidden')
+    elMessages.appendChild(wrap)
+    elMessages.scrollTop = elMessages.scrollHeight
+    return body
+  }
+
+  function scrollDown() { elMessages.scrollTop = elMessages.scrollHeight }
+
+  /* ---------------- 发送 ---------------- */
+
+  function buildDocContext() {
+    var parts = []
+    var name = getDocName()
+    if (name) parts.push('【当前文档】' + name)
+    if (elUseSel.checked) {
+      var sel = getSelection()
+      if (sel) parts.push('【用户当前选中的内容（' + sel.length + ' 字）】\n' + sel.slice(0, 2000))
+    }
+    return parts.length ? parts.join('\n') + '\n\n' : ''
+  }
+
+  /** 对话历史（不含本轮）。系统提示由服务端负责，这里不掺和。 */
+  function historyForServer() {
+    return state.messages
+      .filter(function (m) { return m.role === 'user' || m.role === 'assistant' })
+      .map(function (m) { return { role: m.role, content: m.content } })
+  }
+
+  var TOOL_LABEL = {
+    get_document_info: '读取文档信息',
+    get_selection: '读取选区',
+    get_document_text: '通读文档',
+    replace_selection: '改写选中内容',
+    insert_text: '插入内容',
+    replace_all: '批量替换'
+  }
+
+  function appendToolNode(text) {
+    var wrap = document.createElement('div')
+    wrap.className = 'msg system'
+    var body = document.createElement('div')
+    body.className = 'body'
+    body.textContent = '⚙ ' + text
+    wrap.appendChild(body)
+    elEmpty.classList.add('hidden')
+    elMessages.appendChild(wrap)
+    elMessages.scrollTop = elMessages.scrollHeight
+    return body
+  }
+
+  /** 提示（比如"输出被长度截断"）—— 不当作错误，但必须让用户看见 */
+  function appendNotice(text) {
+    var wrap = document.createElement('div')
+    wrap.className = 'msg system'
+    var body = document.createElement('div')
+    body.className = 'body'
+    body.textContent = '⚠ ' + text
+    wrap.appendChild(body)
+    elEmpty.classList.add('hidden')
+    elMessages.appendChild(wrap)
+    elMessages.scrollTop = elMessages.scrollHeight
+    return body
+  }
+
+  function setSending(on) {
+    state.streaming = on
+    elSend.textContent = on ? '停止' : '发送'
+    elSend.className = on ? 'primary stop' : 'primary'
+    elInput.disabled = on
+  }
+
+  function doSend() {
+    if (state.streaming) { stopStreaming(); return }
+    var text = (elInput.value || '').trim()
+    if (!text) return
+
+    if (!state.serviceOk) {
+      showBanner('err', '本地服务没有运行', [
+        '助手需要本地服务才能工作。',
+        '双击项目里的「启动服务.cmd」，或让安装脚本注册的自启生效。'
+      ])
+      return
+    }
+    if (state.config && !state.config.hasKey) {
+      showBanner('err', '还没配置模型', ['点右上角「⚙ 设置」填一下 API Key。'],
+        '打开设置', openSettings)
+      return
+    }
+
+    hideBanner()
+
+    var history = historyForServer()      // 本轮之前的历史
+    var docContext = buildDocContext()
+
+    state.messages.push({ role: 'user', content: text })
+    elInput.value = ''
+    renderAll()
+
+    var ui = {
+      body: appendStreamingNode(),
+      acc: '',
+      turnId: null,
+      toolNodes: {},
+      writeStarted: false,
+      done: false
+    }
+    setSending(true)
+    setStatus(true, '正在思考…')
+
+    state.ctl = DSH.chat({ text: text, messages: history, docContext: docContext }, function (evt) {
+      handleTurnEvent(evt, ui)
+    })
+  }
+
+  function handleTurnEvent(evt, ui) {
+    switch (evt.type) {
+      case 'turn':
+        ui.turnId = evt.turnId
+        break
+
+      case 'status':
+        setStatus(true, evt.text || '处理中…')
+        break
+
+      case 'delta':
+        ui.acc += evt.text
+        ui.body.innerHTML = escapeHtml(ui.acc).replace(/\n/g, '<br>')
+        scrollDown()
+        break
+
+      case 'tool':
+        executeToolCall(evt, ui)
+        break
+
+      case 'tool_result': {
+        var node = ui.toolNodes[evt.id]
+        if (node) node.textContent = (evt.ok ? '✓ ' : '✗ ') + (TOOL_LABEL[evt.name] || evt.name)
+        break
+      }
+
+      case 'error':
+        finishTurn(ui, evt)
+        break
+
+      case 'notice':
+        appendNotice(evt.text)
+        break
+
+      case 'end':
+        ui.endInfo = evt
+        break
+
+      case 'eof':
+        finishTurn(ui, null)
+        break
+    }
+  }
+
+  /* 收到服务端的工具调用请求 → 在本地用 JSAPI 执行 → 把结果送回去。
+     文档操作只能在加载项上下文里做，所以必须绕这一圈：
+       服务 →（SSE）→ 这里执行 →（POST）→ 服务继续 */
+  function executeToolCall(evt, ui) {
+    var label = TOOL_LABEL[evt.name] || evt.name
+    ui.toolNodes[evt.id] = appendToolNode(evt.text || ('正在' + label + '…'))
+
+    // 第一次真正要写文档时才开启整轮撤销打包 —— 纯读操作不该污染撤销栈
+    if (evt.isWrite && !ui.writeStarted) {
+      ui.writeStarted = true
+      try { DSH_DOC.beginTurn(state.writeMode) } catch (e) {}
+    }
+
+    var res
+    if (DSH_DOC.handles(evt.name)) {
+      res = DSH_DOC.invoke(evt.name, evt.args || {})
+    } else {
+      res = { ok: false, text: '当前版本不支持这个工具：' + evt.name }
+    }
+
+    DSH.toolResult({
+      turnId: ui.turnId,
+      id: evt.id,
+      name: evt.name,
+      ok: !!res.ok,
+      text: res.text == null ? '' : String(res.text)
+    }, function () { /* 服务端若已超时也无妨，循环自己会收尾 */ })
+  }
+
+  function finishTurn(ui, err) {
+    if (ui.done) return
+    ui.done = true
+    setSending(false)
+
+    // 收尾：结束撤销记录、恢复修订开关（不管成功失败都要做，别把文档留在修订模式）
+    var writes = 0
+    try { writes = DSH_DOC.endTurn() } catch (e) {}
+
+    if (err) {
+      setStatus(false, '出错了')
+      if (ui.acc) { state.messages.push({ role: 'assistant', content: ui.acc }); renderAll() }
+      else { var dead = ui.body.closest('.msg'); if (dead) dead.remove() }
+      var lines = []
+      if (err.hint) lines.push(err.hint)
+      if (err.raw) lines.push(String(err.raw).slice(0, 200))
+      if (err.status) lines.push('HTTP ' + err.status)
+      showBanner('err', err.short || '请求失败', lines)
+      return
+    }
+
+    if (ui.acc) {
+      state.messages.push({ role: 'assistant', content: ui.acc })
+    } else if (writes) {
+      state.messages.push({ role: 'assistant', content: '已完成修改，改动以修订形式出现在文档里。' })
+    } else {
+      var empty = ui.body.closest('.msg'); if (empty) empty.remove()
+    }
+    renderAll()
+    setStatus(true, writes ? '已修改文档 · 按 Ctrl+Z 可整轮撤销' : '就绪')
+  }
+
+  function stopStreaming() {
+    try { state.ctl && state.ctl.abort() } catch (e) {}
+    setSending(false)
+    setStatus(true, '已停止')
+  }
+
+  function openSettings() {
+    // 只走**一条**路：广播给加载项主上下文，由它开悬浮窗。
+    //
+    // 这里原来还有个"兜底"直接调 window.Application.ShowDialog —— 但侧栏
+    // 其实也持有 Application，于是两条路都成功，**一次点击开出两个一模一样的窗口**。
+    // 实测就是这个现象。改成：广播成功就直接返回。
+    if (DSH_BUS.post({ type: 'open-settings' })) return
+
+    // 只有广播通道不可用时（老内核没有 BroadcastChannel）才自己开
+    try {
+      if (window.Application && window.Application.ShowDialog) {
+        window.Application.ShowDialog(location.origin + '/ui/settings.html', 'DSH 模型设置', 560, 700, false)
+      }
+    } catch (e) {}
+  }
+
+  /* ---------------- 初始化 ---------------- */
+
+  function refreshConfig() {
+    DSH.getConfig(function (cfg) {
+      state.config = cfg
+      state.writeMode = (cfg && cfg.writeMode === 'direct') ? 'direct' : 'track'
+      try { DSH_DOC.setWriteMode(state.writeMode) } catch (e) {}
+      if (cfg && cfg.model) {
+        var st = state.writeMode === 'track' ? '修订留痕' : '直接修改'
+        elModel.textContent = cfg.model + ' · ' + st
+      } else {
+        elModel.textContent = ''
+      }
+      if (cfg && !cfg.hasKey) {
+        showBanner('err', '还没配置模型', [
+          '这个助手用的是你自己的 API Key，直接连你选的厂商，不经过任何第三方服务器。'
+        ], '打开模型设置', openSettings)
+      }
+    })
+  }
+
+  function init() {
+    DSH.ping(function (r) {
+      state.serviceOk = !!(r && r.ok)
+      if (state.serviceOk) {
+        setStatus(true, '就绪')
+        hideBanner()
+        refreshConfig()
+      } else {
+        setStatus(false, '服务未运行')
+        showBanner('err', '本地服务没有运行', [
+          '助手需要一个本地服务来做模型请求和文档操作。',
+          '请双击项目里的「启动服务.cmd」。'
+        ])
+      }
+    })
+
+    DSH_BUS.on(function (msg) {
+      if (msg && msg.type === 'config-saved') { hideBanner(); refreshConfig() }
+    })
+
+    elSend.onclick = doSend
+    $('btnSettings').onclick = openSettings
+    $('btnClear').onclick = function () {
+      state.messages = []
+      renderAll()
+      setStatus(true, '已清空')
+      refreshSelectionInfo()
+    }
+
+    elInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doSend() }
+    })
+    elInput.addEventListener('input', function () {
+      elInput.style.height = 'auto'
+      elInput.style.height = Math.min(180, elInput.scrollHeight) + 'px'
+    })
+
+    elUseSel.addEventListener('change', refreshSelectionInfo)
+    // 用户在文档里换选区后，回来就能看到最新的
+    setInterval(refreshSelectionInfo, 2500)
+    refreshSelectionInfo()
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
+  else init()
+})()
+</script>
+</body>
+</html>

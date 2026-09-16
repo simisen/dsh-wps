@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JsPlugin>
+  <ApiVersion>1.0.0</ApiVersion>
+  <Name>DshWps</Name>
+  <Description>把 AI 助手嵌入 WPS：自带 API Key、多厂商、修订留痕、整轮撤销</Description>
+</JsPlugin>

@@ -4,6 +4,10 @@ dev/testhome-isolated/
 dev/*.log
 *.log
 
+# 开发时的临时草稿（下划线开头）：测试日志、注册表备份之类，
+# 里面常有本机路径和用户名，既不该进仓库也不该进发布包
+dev/_*
+
 # 凭据 —— 这个项目是要分享的，泄漏一次就等于把 Key 送人
 credentials.json
 *.key

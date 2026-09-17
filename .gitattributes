@@ -5,6 +5,9 @@
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 
+# 给普通人看的说明书：CRLF，配合 UTF-8 BOM，任何 Windows 记事本都能正确显示中文
+*.txt text eol=crlf
+
 # 其余一律 LF
 *.js text eol=lf
 *.mjs text eol=lf

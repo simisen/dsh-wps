@@ -168,6 +168,61 @@ try {
   bad('ribbon 回调校验失败: ' + e.message)
 }
 
+/* ---- 面向用户的 .cmd / .ps1 编码检查 ----
+   实测教训（两个坑都只在换机器时才暴露）：
+
+   1) cmd.exe 按本机 OEM 代码页（中文机器是 936）逐字节读批处理文件。
+      写进 .cmd 的 UTF-8 中文会显示成乱码，开头的 UTF-8 BOM 还会让
+      第一行报 `'ï»¿@echo' 不是内部或外部命令`。
+      → .cmd 必须纯 ASCII、无 BOM，中文提示一律放 .ps1。
+
+   2) PowerShell 5.1 读 .ps1 时，没有 BOM 就按本机 ANSI 代码页解码，
+      中文同样会乱成一团，而且**经常连带吃掉后面的引号**，
+      报出来的是"意外的标记 }"这种完全指错方向的语法错误。
+      → .ps1 必须带 UTF-8 BOM。 */
+try {
+  const root = path.resolve(__dirname, '..')
+  const cmdFiles = fs.readdirSync(root).filter(f => f.toLowerCase().endsWith('.cmd'))
+  const BOM = Buffer.from([0xEF, 0xBB, 0xBF])
+
+  let cmdBad = 0
+  for (const f of cmdFiles) {
+    const buf = fs.readFileSync(path.join(root, f))
+    if (buf.subarray(0, 3).equals(BOM)) { bad(`${f} 带 UTF-8 BOM，cmd.exe 会把它当命令的一部分`); cmdBad++ }
+    const high = buf.findIndex(b => b > 127)
+    if (high !== -1) { bad(`${f} 含非 ASCII 字节（偏移 ${high}），cmd.exe 会显示成乱码`); cmdBad++ }
+    // cmd.exe 是按行解析的，官方预期 CRLF。裸 LF 在含括号块/标签的批处理里会出怪问题，
+    // 而这类问题只在别人机器上偶发 —— 不如统一钉成 CRLF。
+    const text = buf.toString('latin1')
+    if (/(^|[^\r])\n/.test(text)) { bad(`${f} 用了裸 LF 换行，批处理应当统一 CRLF`); cmdBad++ }
+  }
+  if (cmdFiles.length && cmdBad === 0) ok(`面向用户的 ${cmdFiles.length} 个 .cmd 都是纯 ASCII、无 BOM、CRLF`)
+
+  const instDir = path.join(root, 'installer')
+  const psFiles = fs.readdirSync(instDir).filter(f => f.toLowerCase().endsWith('.ps1'))
+  let psBad = 0
+  for (const f of psFiles) {
+    const buf = fs.readFileSync(path.join(instDir, f))
+    if (!buf.subarray(0, 3).equals(BOM)) { bad(`installer/${f} 缺 UTF-8 BOM，PowerShell 5.1 会把中文读成乱码`); psBad++ }
+    if (/(^|[^\r])\n/.test(buf.toString('latin1'))) { bad(`installer/${f} 用了裸 LF 换行，应当统一 CRLF`); psBad++ }
+  }
+  if (psFiles.length && psBad === 0) ok(`installer 下 ${psFiles.length} 个 .ps1 都带 UTF-8 BOM 且是 CRLF`)
+
+  /* .cmd 里提到的 .ps1 必须真的存在 —— 改名最容易漏掉这里 */
+  for (const f of cmdFiles) {
+    const text = fs.readFileSync(path.join(root, f), 'utf8')
+    const re = /-File\s+"%~dp0([^"]+)"/g
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const target = path.join(root, m[1].replace(/\//g, path.sep))
+      if (fs.existsSync(target)) ok(`${f} 转发的脚本存在: ${m[1]}`)
+      else bad(`${f} 转发的脚本不存在: ${m[1]}`)
+    }
+  }
+} catch (e) {
+  bad('.cmd/.ps1 编码检查失败: ' + e.message)
+}
+
 console.log('  ' + '-'.repeat(60))
 console.log('  通过 ' + pass + ' 项，失败 ' + fail + ' 项')
 console.log('')

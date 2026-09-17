@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { execFileSync } from 'node:child_process'
+import { createZip } from './mkzip.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -22,6 +22,10 @@ const DIST = path.join(ROOT, 'dist')
 const EXCLUDE_DIRS = new Set(['node_modules', 'dist', '.git', 'runtime', 'testhome', 'testhome-isolated'])
 const EXCLUDE_FILES = new Set(['credentials.json', '.env', 'package-lock.json'])
 const EXCLUDE_EXT = new Set(['.log', '.key', '.pem', '.zip', '.7z', '.tmp'])
+
+/* 开发草稿（下划线开头）：测试日志、注册表备份之类，里面常带本机路径和用户名。
+   光靠下面的密钥扫描挡不住所有情况，直接从源头跳过更省事。 */
+const isScratch = (name) => name.startsWith('_')
 
 /* ---- 2. 疑似密钥的特征 ---- */
 const SECRET_PATTERNS = [
@@ -47,6 +51,32 @@ let pass = 0
 let fail = 0
 const ok = (m) => { console.log('  OK    ' + m); pass++ }
 const bad = (m) => { console.log('  FAIL  ' + m); fail++ }
+
+/**
+ * 扫 zip 的中央目录，确认每个非 ASCII 文件名都置了 UTF-8 标志位（通用位 11）。
+ * 没这个标志，Windows 会按本机代码页解码文件名 —— 中文机器上看着没事，
+ * 换个语言的机器就全是乱码，用户根本找不到该双击哪个文件。
+ */
+function checkUtf8Names (zipPath) {
+  const buf = fs.readFileSync(zipPath)
+  const SIG = Buffer.from([0x50, 0x4b, 0x01, 0x02])
+  let p = 0
+  let total = 0
+  const offenders = []
+  while ((p = buf.indexOf(SIG, p)) !== -1) {
+    const flag = buf.readUInt16LE(p + 8)
+    const nlen = buf.readUInt16LE(p + 28)
+    const elen = buf.readUInt16LE(p + 30)
+    const clen = buf.readUInt16LE(p + 32)
+    const name = buf.subarray(p + 46, p + 46 + nlen).toString('utf8')
+    if (/[^\x00-\x7F]/.test(name)) {
+      total++
+      if ((flag & 0x800) === 0) offenders.push(name)
+    }
+    p += 46 + nlen + elen + clen
+  }
+  return { total, offenders }
+}
 
 console.log('')
 console.log('  打包发布')
@@ -78,6 +108,7 @@ function walk (dir, relBase = '') {
       walk(path.join(dir, e.name), rel)
     } else {
       if (EXCLUDE_FILES.has(e.name) || EXCLUDE_EXT.has(path.extname(e.name).toLowerCase())) continue
+      if (isScratch(e.name)) continue
       scanFile(path.join(dir, e.name), rel)
     }
   }
@@ -110,6 +141,7 @@ function copy (dir, relBase = '') {
       copy(src, rel)
     } else {
       if (EXCLUDE_FILES.has(e.name) || EXCLUDE_EXT.has(path.extname(e.name).toLowerCase())) continue
+      if (isScratch(e.name)) continue
       fs.copyFileSync(src, path.join(stage, rel))
       copied++
     }
@@ -149,9 +181,15 @@ console.log('  [4/4] 打包…')
 const zipName = `dsh-wps-${version}.zip`
 const zipPath = path.join(DIST, zipName)
 try {
-  execFileSync('tar.exe', ['-a', '-c', '-f', zipPath, '-C', DIST, 'dsh-wps'], { stdio: 'inherit' })
-  const size = fs.statSync(zipPath).size
-  ok(`已生成 dist/${zipName}  (${(size / 1024).toFixed(1)} KB)`)
+  // 用自己的打包器，不用 tar.exe：tar 写中文名不带 UTF-8 标志位，
+  // 换台英文 Windows 解压就是乱码，启动脚本还怎么双击。
+  const r = createZip(stage, 'dsh-wps', zipPath)
+  ok(`已生成 dist/${zipName}  (${(r.bytes / 1024).toFixed(1)} KB, ${r.entries} 个条目)`)
+
+  // 出包前最后一道自检：中文文件名必须带 UTF-8 标志
+  const u = checkUtf8Names(zipPath)
+  if (u.offenders.length === 0) ok(`压缩包内 ${u.total} 个非 ASCII 文件名都带 UTF-8 标志`)
+  else for (const n of u.offenders) bad(`文件名缺 UTF-8 标志，别人解压会看到乱码: ${n}`)
 } catch (e) {
   bad('打 zip 失败: ' + e.message)
 }
@@ -164,7 +202,7 @@ console.log('  ' + '-'.repeat(60))
 console.log('  通过 ' + pass + ' 项，失败 ' + fail + ' 项')
 console.log('')
 if (fail === 0) {
-  console.log('  这个 zip 可以直接发给别人：解压 → 双击 install.cmd 即可。')
+  console.log('  这个 zip 可以直接发给别人：解压 → 双击 点我启动助手.cmd 即可。')
   console.log('  内含：加载项 + 本地服务 + 安装脚本 + 文档 + AGPL 许可')
   console.log('  不含：任何密钥、配置、日志、运行数据')
 }

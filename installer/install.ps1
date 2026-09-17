@@ -141,9 +141,9 @@ if (-not $nodeExe) {
   Say '  [X] 没找到 Node，自动下载也失败了。' 'Red'
   Say ''
   Say '      多半是网络问题。两个办法：' 'Yellow'
-  Say '        1. 连上能访问外网的环境后重新运行 install.cmd' 'Yellow'
+  Say '        1. 连上能访问外网的环境后重新运行 点我启动助手.cmd' 'Yellow'
   Say '        2. 自己装一个 Node.js 18+： https://nodejs.org/' 'Yellow'
-  Say '           装完再运行 install.cmd 即可（会自动识别）' 'Yellow'
+  Say '           装完再运行 点我启动助手.cmd 即可（会自动识别）' 'Yellow'
   Say ''
   exit 1
 }
@@ -153,7 +153,7 @@ Say "       来源: $nodeFrom" 'DarkGray'
 
 if (-not (Test-Path $serverJs)) {
   Say "  [X] 找不到服务文件：$serverJs" 'Red'
-  Say '      请确认 install.cmd 是在项目根目录里运行的。' 'Yellow'
+  Say '      请确认 点我启动助手.cmd 是在项目根目录里运行的。' 'Yellow'
   exit 1
 }
 
@@ -250,7 +250,7 @@ if ($NoAutostart) {
     Say '  [OK] 已注册开机自启（登录后自动在后台启动服务）' 'Green'
   } catch {
     Say '  [!] 开机自启注册失败（可能被组策略或安全软件拦了）' 'Yellow'
-    Say '      不影响使用，但每次开机需要手动双击 start-service.cmd' 'Yellow'
+    Say '      不影响使用，但每次开机需要手动双击【点我修复助手】' 'Yellow'
   }
   Say "       启动器: $vbs" 'DarkGray'
   Say "       服务日志: $svcLog" 'DarkGray'
@@ -282,7 +282,7 @@ if ($NoStart) {
       if ($r.StatusCode -eq 200) { Say "  [OK] 服务已启动：$url" 'Green' }
       else { Say "  [!] 服务响应异常：HTTP $($r.StatusCode)" 'Yellow' }
     } catch {
-      Say '  [!] 服务好像没起来。手动跑一下 start-service.cmd 看报什么错。' 'Yellow'
+      Say '  [!] 服务好像没起来。手动双击【点我修复助手】看看报什么错。' 'Yellow'
     }
   }
 }
@@ -300,5 +300,5 @@ Say '    4. 右侧栏会让你填 API Key —— 填你自己的，直接连厂�
 Say ''
 Say "  本地服务地址：$url" 'DarkGray'
 Say "  配置文件目录：$dataDir" 'DarkGray'
-Say '  卸载：运行 uninstall.cmd' 'DarkGray'
+Say '  卸载：双击【点我卸载助手】' 'DarkGray'
 Say ''

@@ -31,7 +31,12 @@ function ensureDir() {
 
 function readJson(p, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'))
+    // 必须先剥掉 UTF-8 BOM，否则 JSON.parse 直接抛错、整个文件被当成不存在。
+    // 这不是理论问题：记事本、PowerShell 的 Set-Content -Encoding UTF8
+    // 都会给文件加上 BOM，用户手改一次配置，Key 就"莫名消失"了 ——
+    // 表现出来正是「每次都要重新输入 API」。
+    const text = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')
+    return JSON.parse(text)
   } catch {
     return fallback
   }

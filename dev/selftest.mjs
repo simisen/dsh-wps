@@ -116,6 +116,33 @@ await check('环境变量覆盖 Key', async () => {
   return 'keySource=' + j.keySource
 })
 
+// 这条是真实踩出来的：我用 PowerShell 的 `Set-Content -Encoding UTF8` 改了一下
+// credentials.json，PS 5.1 顺手加了 UTF-8 BOM —— 服务端 JSON.parse 直接抛错，
+// Key "凭空消失"，界面又要求重新输入。记事本保存也是同样的后果。
+await check('配置文件带 UTF-8 BOM 也要能读出 Key', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const home = process.env.DSH_WPS_TEST_HOME
+    || path.join(process.cwd(), 'dev', 'testhome-isolated')
+  const credPath = path.join(home, 'credentials.json')
+
+  const before = await (await fetch(BASE + '/api/config')).json()
+  assert(before.hasKey === true, '前置条件：应该已经有 Key')
+
+  const original = fs.readFileSync(credPath)
+  assert(original[0] !== 0xEF, '前置条件：原文件本来不该带 BOM')
+  try {
+    // 在文件开头插入 UTF-8 BOM
+    fs.writeFileSync(credPath, Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), original]))
+    const after = await (await fetch(BASE + '/api/config')).json()
+    assert(after.hasKey === true, '带 BOM 的 credentials.json 被当成坏文件了，Key 读不出来')
+    assert(after.keySource === before.keySource, 'keySource 变了：' + before.keySource + ' -> ' + after.keySource)
+    return 'BOM 文件仍然读出 Key（keySource=' + after.keySource + '）'
+  } finally {
+    fs.writeFileSync(credPath, original)   // 无论成败都还原
+  }
+})
+
 await check('错误翻译：baseURL 不通 -> 应给人话', async () => {
   const r = await fetch(BASE + '/api/test', {
     method: 'POST',

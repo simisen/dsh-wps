@@ -119,7 +119,9 @@ if ($PurgeConfig) {
   if (Test-Path $dataDir) {
     Say ''
     Say "  配置和 API Key 保留在：$dataDir" 'DarkGray'
-    Say '  要一并删除的话，运行：  uninstall.cmd -PurgeConfig' 'DarkGray'
+    Say '  想连 API Key 一起删掉：' 'DarkGray'
+    Say '    把【点我卸载助手.cmd】拖进「命令提示符」窗口，' 'DarkGray'
+    Say '    在它后面打个空格，再输入 -PurgeConfig，回车。' 'DarkGray'
   }
 }
 
